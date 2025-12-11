@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - StudyTrackr{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1>Dashboard</h1>
+        <p class="text-muted">Welcome, {{ session.username }}!</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Current GPA</h5>
+                <h2 class="text-primary">{{ gpa }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Total Courses</h5>
+                <h2 class="text-success">{{ courses|length }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Total Study Hours</h5>
+                <h2 class="text-info">
+                    {% set total_hours = 0 %}
+                    {% for course in courses %}
+                        {% for session in course.sessions %}
+                            {% set total_hours = total_hours + session.hours %}
+                        {% endfor %}
+                    {% endfor %}
+                    {{ total_hours|round(1) }}
+                </h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Study Hours by Course</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="studyChart" width="400" height="150"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Your Courses</h5>
+            </div>
+            <div class="card-body">
+                {% if courses %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Course Name</th>
+                                <th>Estimated Grade</th>
+                                <th>GPA Points</th>
+                                <th>Total Study Hours</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for course in courses %}
+                            <tr>
+                                <td>{{ course.name }}</td>
+                                <td>{{ course.estimated_grade }}%</td>
+                                <td>
+                                    {% if course.estimated_grade >= 93 %}4.0
+                                    {% elif course.estimated_grade >= 90 %}3.7
+                                    {% elif course.estimated_grade >= 87 %}3.3
+                                    {% elif course.estimated_grade >= 83 %}3.0
+                                    {% elif course.estimated_grade >= 80 %}2.7
+                                    {% elif course.estimated_grade >= 77 %}2.3
+                                    {% elif course.estimated_grade >= 73 %}2.0
+                                    {% elif course.estimated_grade >= 70 %}1.7
+                                    {% elif course.estimated_grade >= 67 %}1.3
+                                    {% elif course.estimated_grade >= 65 %}1.0
+                                    {% else %}0.0
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set course_hours = 0 %}
+                                    {% for session in course.sessions %}
+                                        {% set course_hours = course_hours + session.hours %}
+                                    {% endfor %}
+                                    {{ course_hours|round(1) }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No courses yet. <a href="{{ url_for('courses') }}">Add your first course!</a></p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    const ctx = document.getElementById('studyChart').getContext('2d');
+    const studyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ chart_labels|tojson }},
+            datasets: [{
+                label: 'Study Hours',
+                data: {{ chart_data|tojson }},
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}
+
