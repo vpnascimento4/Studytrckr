@@ -112,28 +112,36 @@ def grade_to_gpa(grade):
 # Auth routes
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        email = request.form.get('email')
-        password = request.form.get('password')
+    try:
+        if request.method == 'POST':
+            username = request.form.get('username')
+            email = request.form.get('email')
+            password = request.form.get('password')
+            
+            if User.query.filter_by(username=username).first():
+                flash('Username already exists', 'error')
+                return redirect(url_for('register'))
+            
+            if User.query.filter_by(email=email).first():
+                flash('Email already exists', 'error')
+                return redirect(url_for('register'))
+            
+            password_hash = generate_password_hash(password)
+            user = User(username=username, email=email, password_hash=password_hash)
+            db.session.add(user)
+            db.session.commit()
+            
+            flash('Registration successful! Please login.', 'success')
+            return redirect(url_for('login'))
         
-        if User.query.filter_by(username=username).first():
-            flash('Username already exists', 'error')
-            return redirect(url_for('register'))
-        
-        if User.query.filter_by(email=email).first():
-            flash('Email already exists', 'error')
-            return redirect(url_for('register'))
-        
-        password_hash = generate_password_hash(password)
-        user = User(username=username, email=email, password_hash=password_hash)
-        db.session.add(user)
-        db.session.commit()
-        
-        flash('Registration successful! Please login.', 'success')
-        return redirect(url_for('login'))
-    
-    return render_template('register.html')
+        return render_template('register.html')
+    except Exception as e:
+        # Log error for debugging
+        import traceback
+        error_msg = f"Registration error: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        flash(f'An error occurred: {str(e)}', 'error')
+        return render_template('register.html'), 500
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -295,8 +303,14 @@ def delete_session(id):
 
 # Application entry point for both local and Railway deployment
 if __name__ == '__main__':
+    # Ensure database is initialized before starting the server
+    print("Starting Flask application...")
+    init_db()
+    
     # Get port from environment variable (Railway sets this) or default to 5000
     port = int(os.environ.get('PORT', 5000))
+    print(f"Server starting on port {port}")
+    
     # Run on 0.0.0.0 to accept connections from all interfaces (required for Railway)
     app.run(host='0.0.0.0', port=port, debug=False)
 
