@@ -2,13 +2,48 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+import os
 
-app = Flask(__name__)
+app = Flask(__name__, 
+            static_folder='static',
+            template_folder='templates')
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///studytrackr.db'
+# Ensure sessions work in serverless environment
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+# Database configuration: Use /tmp on Vercel (serverless), instance/ locally
+# Vercel's filesystem is read-only except /tmp, so SQLite must be stored there
+# Check for Vercel environment (VERCEL_ENV is set by Vercel)
+is_vercel = os.environ.get('VERCEL_ENV') or os.environ.get('VERCEL')
+if is_vercel:
+    db_path = '/tmp/studytrackr.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+else:
+    # Local development: use instance/ directory (Flask convention)
+    os.makedirs('instance', exist_ok=True)
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///instance/studytrackr.db'
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+
+# Initialize database tables (works for both local and Vercel)
+# Wrap in try-except for serverless environments where initialization might fail
+def init_db():
+    """Initialize database tables"""
+    try:
+        with app.app_context():
+            db.create_all()
+    except Exception as e:
+        # Log error for debugging but don't fail - tables might already exist
+        # In serverless, this will be retried on each cold start if needed
+        import traceback
+        print(f"Database initialization: {e}")
+        traceback.print_exc()
+
+# Initialize on import (for both local and serverless)
+# In serverless, this runs on cold start
+init_db()
 
 # Models
 class User(db.Model):
@@ -85,22 +120,30 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+    try:
+        if request.method == 'POST':
+            username = request.form.get('username')
+            password = request.form.get('password')
+            
+            user = User.query.filter_by(username=username).first()
+            
+            if user and check_password_hash(user.password_hash, password):
+                session['user_id'] = user.id
+                session['username'] = user.username
+                flash('Login successful!', 'success')
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Invalid username or password', 'error')
+                return redirect(url_for('login'))
         
-        user = User.query.filter_by(username=username).first()
-        
-        if user and check_password_hash(user.password_hash, password):
-            session['user_id'] = user.id
-            session['username'] = user.username
-            flash('Login successful!', 'success')
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Invalid username or password', 'error')
-            return redirect(url_for('login'))
-    
-    return render_template('login.html')
+        return render_template('login.html')
+    except Exception as e:
+        # Log error for debugging
+        import traceback
+        print(f"Login error: {e}")
+        traceback.print_exc()
+        flash(f'An error occurred: {str(e)}', 'error')
+        return render_template('login.html'), 500
 
 @app.route('/logout')
 def logout():
@@ -233,8 +276,8 @@ def delete_session(id):
     flash('Study session deleted successfully!', 'success')
     return redirect(url_for('sessions'))
 
+# Local development entry point
+# Database tables are already initialized above, so we can just run the app
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     app.run(debug=True)
 
