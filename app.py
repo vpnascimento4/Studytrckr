@@ -11,15 +11,17 @@ app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 # Ensure sessions work in serverless environment
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-# Database configuration: Use /tmp on Vercel (serverless), instance/ locally
-# Vercel's filesystem is read-only except /tmp, so SQLite must be stored there
-# Check for Vercel environment (VERCEL_ENV is set by Vercel)
+# Database configuration: 
+# - Railway: Use instance/ directory (persistent storage available)
+# - Vercel: Use /tmp (serverless, ephemeral)
+# - Local: Use instance/ directory (Flask convention)
 is_vercel = os.environ.get('VERCEL_ENV') or os.environ.get('VERCEL')
 if is_vercel:
+    # Vercel serverless: use /tmp (only writable location)
     db_path = '/tmp/studytrackr.db'
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 else:
-    # Local development: use instance/ directory (Flask convention)
+    # Railway and local development: use instance/ directory
     os.makedirs('instance', exist_ok=True)
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///instance/studytrackr.db'
 
@@ -291,8 +293,10 @@ def delete_session(id):
     flash('Study session deleted successfully!', 'success')
     return redirect(url_for('sessions'))
 
-# Local development entry point
-# Database tables are already initialized above, so we can just run the app
+# Application entry point for both local and Railway deployment
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Get port from environment variable (Railway sets this) or default to 5000
+    port = int(os.environ.get('PORT', 5000))
+    # Run on 0.0.0.0 to accept connections from all interfaces (required for Railway)
+    app.run(host='0.0.0.0', port=port, debug=False)
 

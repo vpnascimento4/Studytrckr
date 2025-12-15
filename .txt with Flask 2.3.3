@@ -1,0 +1,11 @@
+* [33m011fd6d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Prepare Flask app for Vercel deployment
+* [33ma185997[m new
+[31m|[m * [33mdcc1ab9[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Create vercel.json
+[31m|[m * [33m58ab992[m Delete templates/vercel.json
+[31m|[m * [33md04bfdd[m Create vercel.json
+[31m|[m * [33mccdf4d9[m Update app.py
+[31m|[m * [33m6145ef0[m Update app.py
+[31m|[m * [33m3d98378[m Update app.py
+[31m|[m * [33m0832b76[m Create README.md
+[31m|[m[31m/[m  
+* [33m6ca148a[m no changes
