@@ -12,7 +12,7 @@ app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Database configuration: 
-# - Railway: Use instance/ directory (persistent storage available)
+# - Railway: Use absolute path in project directory (persistent storage available)
 # - Vercel: Use /tmp (serverless, ephemeral)
 # - Local: Use instance/ directory (Flask convention)
 is_vercel = os.environ.get('VERCEL_ENV') or os.environ.get('VERCEL')
@@ -21,26 +21,36 @@ if is_vercel:
     db_path = '/tmp/studytrackr.db'
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 else:
-    # Railway and local development: use instance/ directory
-    # Ensure the directory exists and is writable
-    instance_dir = 'instance'
+    # Railway and local development: use absolute path
+    # Get the absolute path of the project directory
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    instance_dir = os.path.join(project_root, 'instance')
+    
+    # Ensure the directory exists
     try:
         os.makedirs(instance_dir, exist_ok=True)
-        # Test if directory is writable
+        # Use absolute path for database file
+        db_path = os.path.join(instance_dir, 'studytrackr.db')
+        db_path = os.path.abspath(db_path)  # Ensure absolute path
+        
+        # Test if we can write to the directory
         test_file = os.path.join(instance_dir, '.test_write')
         with open(test_file, 'w') as f:
             f.write('test')
         os.remove(test_file)
-        print(f"✓ Instance directory '{instance_dir}' is writable")
+        
+        print(f"✓ Database directory created: {instance_dir}")
+        print(f"✓ Database file path: {db_path}")
+        print(f"✓ Directory is writable")
+        
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     except Exception as e:
-        print(f"✗ Warning: Cannot write to '{instance_dir}': {e}")
-        # Fallback to current directory if instance/ fails
-        instance_dir = '.'
-        print(f"  Using current directory instead")
-    
-    db_path = os.path.join(instance_dir, 'studytrackr.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
-    print(f"Database path: {db_path}")
+        # If instance/ fails, try current directory with absolute path
+        print(f"✗ Warning: Cannot use instance directory: {e}")
+        db_path = os.path.join(project_root, 'studytrackr.db')
+        db_path = os.path.abspath(db_path)
+        print(f"  Using fallback path: {db_path}")
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
