@@ -28,22 +28,31 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Initialize database tables (works for both local and Vercel)
-# Wrap in try-except for serverless environments where initialization might fail
+# Use lazy initialization for serverless - only create tables when first needed
+_db_initialized = False
+
 def init_db():
-    """Initialize database tables"""
+    """Initialize database tables - lazy initialization for serverless"""
+    global _db_initialized
+    if _db_initialized:
+        return
+    
     try:
         with app.app_context():
             db.create_all()
+            _db_initialized = True
     except Exception as e:
         # Log error for debugging but don't fail - tables might already exist
-        # In serverless, this will be retried on each cold start if needed
+        # In serverless, this will be retried on each request if needed
         import traceback
         print(f"Database initialization: {e}")
         traceback.print_exc()
+        # Don't set _db_initialized = True if it failed, so we can retry
 
-# Initialize on import (for both local and serverless)
-# In serverless, this runs on cold start
-init_db()
+# Initialize on import for local development
+# For serverless, initialization happens on first request
+if not os.environ.get('VERCEL_ENV') and not os.environ.get('VERCEL'):
+    init_db()
 
 # Models
 class User(db.Model):
@@ -66,6 +75,12 @@ class StudySession(db.Model):
     date = db.Column(db.Date, nullable=False)
     hours = db.Column(db.Float, nullable=False)
     note = db.Column(db.Text, nullable=True)
+
+# Ensure database is initialized before handling requests (for serverless)
+@app.before_request
+def ensure_db_initialized():
+    """Ensure database tables exist before handling requests"""
+    init_db()
 
 def grade_to_gpa(grade):
     """Convert 0-100 grade to 4.0 GPA scale"""
