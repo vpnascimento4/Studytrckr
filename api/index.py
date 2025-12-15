@@ -6,11 +6,26 @@ import sys
 import os
 
 # Add parent directory to path so we can import app
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
 
-from app import app
-
-# Vercel's Python runtime expects the Flask app object directly
-# The @vercel/python builder automatically detects Flask apps and wraps them
-handler = app
+try:
+    from app import app
+    
+    # Vercel's Python runtime automatically detects Flask apps
+    # Expose the Flask app object as 'handler'
+    handler = app
+    
+except Exception as e:
+    # If import fails, create a simple error handler
+    import traceback
+    error_msg = f"Failed to import Flask app: {str(e)}\n{traceback.format_exc()}"
+    print(error_msg)
+    
+    def handler(request):
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'text/html'},
+            'body': f'<h1>Application Error</h1><pre>{error_msg}</pre>'
+        }
 
