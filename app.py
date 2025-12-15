@@ -1,45 +1,37 @@
-import os
-from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+import os
 
 app = Flask(__name__)
-
-# -----------------------------
-# Config (local + deploy)
-# -----------------------------
-# Use uma env var no Vercel: SECRET_KEY
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key")
-
-# Garante que a pasta instance exista (onde fica o SQLite por padrão)
-os.makedirs(app.instance_path, exist_ok=True)
-
-# SQLite dentro de instance/
-db_path = os.path.join(app.instance_path, "studytrackr.db")
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///studytrackr.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
-# -----------------------------
+# =====================
 # Models
-# -----------------------------
+# =====================
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
-    courses = db.relationship("Course", backref="user", lazy=True, cascade="all, delete-orphan")
-
+    courses = db.relationship(
+        "Course", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
 
 class Course(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     estimated_grade = db.Column(db.Integer, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    sessions = db.relationship("StudySession", backref="course", lazy=True, cascade="all, delete-orphan")
-
+    sessions = db.relationship(
+        "StudySession", backref="course", lazy=True, cascade="all, delete-orphan"
+    )
 
 class StudySession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -48,14 +40,11 @@ class StudySession(db.Model):
     hours = db.Column(db.Float, nullable=False)
     note = db.Column(db.Text, nullable=True)
 
+# =====================
+# Helpers
+# =====================
 
-# Cria as tabelas automaticamente
-with app.app_context():
-    db.create_all()
-
-
-def grade_to_gpa(grade: int) -> float:
-    """Convert 0-100 grade to 4.0 GPA scale"""
+def grade_to_gpa(grade):
     if grade >= 93:
         return 4.0
     elif grade >= 90:
@@ -79,10 +68,10 @@ def grade_to_gpa(grade: int) -> float:
     else:
         return 0.0
 
+# =====================
+# Auth Routes
+# =====================
 
-# -----------------------------
-# Auth routes
-# -----------------------------
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -108,7 +97,6 @@ def register():
 
     return render_template("register.html")
 
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -122,12 +110,11 @@ def login():
             session["username"] = user.username
             flash("Login successful!", "success")
             return redirect(url_for("dashboard"))
-        else:
-            flash("Invalid username or password", "error")
-            return redirect(url_for("login"))
+
+        flash("Invalid username or password", "error")
+        return redirect(url_for("login"))
 
     return render_template("login.html")
-
 
 @app.route("/logout")
 def logout():
@@ -135,37 +122,31 @@ def logout():
     flash("Logged out successfully", "success")
     return redirect(url_for("login"))
 
+# =====================
+# Main Routes
+# =====================
 
 @app.route("/")
 def index():
-    if "user_id" in session:
+    if session.get("user_id"):
         return redirect(url_for("dashboard"))
     return redirect(url_for("login"))
 
-
-# -----------------------------
-# App routes
-# -----------------------------
 @app.route("/dashboard")
 def dashboard():
-    if "user_id" not in session:
+    if not session.get("user_id"):
         flash("Please login first", "error")
         return redirect(url_for("login"))
 
     user = User.query.get(session["user_id"])
     courses = Course.query.filter_by(user_id=user.id).all()
 
-    # GPA
     total_points = 0.0
-    total_courses = 0
-
     for course in courses:
         total_points += grade_to_gpa(course.estimated_grade)
-        total_courses += 1
 
-    gpa = total_points / total_courses if total_courses > 0 else 0.0
+    gpa = total_points / len(courses) if courses else 0.0
 
-    # Chart
     chart_labels = []
     chart_data = []
     for course in courses:
@@ -181,10 +162,9 @@ def dashboard():
         chart_data=chart_data,
     )
 
-
 @app.route("/courses", methods=["GET", "POST"])
 def courses():
-    if "user_id" not in session:
+    if not session.get("user_id"):
         flash("Please login first", "error")
         return redirect(url_for("login"))
 
@@ -192,21 +172,23 @@ def courses():
         name = request.form.get("name")
         estimated_grade = int(request.form.get("estimated_grade"))
 
-        course = Course(name=name, estimated_grade=estimated_grade, user_id=session["user_id"])
+        course = Course(
+            name=name,
+            estimated_grade=estimated_grade,
+            user_id=session["user_id"],
+        )
         db.session.add(course)
         db.session.commit()
 
         flash("Course added successfully!", "success")
         return redirect(url_for("courses"))
 
-    user = User.query.get(session["user_id"])
-    courses_list = Course.query.filter_by(user_id=user.id).all()
+    courses_list = Course.query.filter_by(user_id=session["user_id"]).all()
     return render_template("courses.html", courses=courses_list)
-
 
 @app.route("/courses/<int:id>/delete", methods=["POST"])
 def delete_course(id):
-    if "user_id" not in session:
+    if not session.get("user_id"):
         flash("Please login first", "error")
         return redirect(url_for("login"))
 
@@ -220,10 +202,9 @@ def delete_course(id):
     flash("Course deleted successfully!", "success")
     return redirect(url_for("courses"))
 
-
 @app.route("/sessions", methods=["GET", "POST"])
 def sessions():
-    if "user_id" not in session:
+    if not session.get("user_id"):
         flash("Please login first", "error")
         return redirect(url_for("login"))
 
@@ -239,27 +220,32 @@ def sessions():
             return redirect(url_for("sessions"))
 
         date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        session_obj = StudySession(course_id=course_id, date=date, hours=hours, note=note)
+        session_obj = StudySession(
+            course_id=course_id, date=date, hours=hours, note=note
+        )
         db.session.add(session_obj)
         db.session.commit()
 
         flash("Study session added successfully!", "success")
         return redirect(url_for("sessions"))
 
-    user = User.query.get(session["user_id"])
-    courses_list = Course.query.filter_by(user_id=user.id).all()
+    courses_list = Course.query.filter_by(user_id=session["user_id"]).all()
     sessions_list = (
         StudySession.query.join(Course)
-        .filter(Course.user_id == user.id)
+        .filter(Course.user_id == session["user_id"])
         .order_by(StudySession.date.desc())
         .all()
     )
-    return render_template("sessions.html", courses=courses_list, sessions=sessions_list)
 
+    return render_template(
+        "sessions.html",
+        courses=courses_list,
+        sessions=sessions_list,
+    )
 
 @app.route("/sessions/<int:id>/delete", methods=["POST"])
 def delete_session(id):
-    if "user_id" not in session:
+    if not session.get("user_id"):
         flash("Please login first", "error")
         return redirect(url_for("login"))
 
@@ -273,7 +259,11 @@ def delete_session(id):
     flash("Study session deleted successfully!", "success")
     return redirect(url_for("sessions"))
 
+# =====================
+# Run App
+# =====================
 
 if __name__ == "__main__":
-    # Local only
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
