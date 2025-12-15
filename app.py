@@ -22,8 +22,25 @@ if is_vercel:
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 else:
     # Railway and local development: use instance/ directory
-    os.makedirs('instance', exist_ok=True)
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///instance/studytrackr.db'
+    # Ensure the directory exists and is writable
+    instance_dir = 'instance'
+    try:
+        os.makedirs(instance_dir, exist_ok=True)
+        # Test if directory is writable
+        test_file = os.path.join(instance_dir, '.test_write')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        print(f"✓ Instance directory '{instance_dir}' is writable")
+    except Exception as e:
+        print(f"✗ Warning: Cannot write to '{instance_dir}': {e}")
+        # Fallback to current directory if instance/ fails
+        instance_dir = '.'
+        print(f"  Using current directory instead")
+    
+    db_path = os.path.join(instance_dir, 'studytrackr.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    print(f"Database path: {db_path}")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -40,15 +57,35 @@ def init_db():
         return
     
     try:
+        # Check database path and permissions
+        db_uri = app.config['SQLALCHEMY_DATABASE_URI']
+        print(f"Initializing database at: {db_uri}")
+        
+        # Extract file path from SQLite URI
+        if db_uri.startswith('sqlite:///'):
+            db_file = db_uri.replace('sqlite:///', '')
+            db_dir = os.path.dirname(db_file) if os.path.dirname(db_file) else '.'
+            
+            # Ensure directory exists
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
+                print(f"Created database directory: {db_dir}")
+            
+            # Check if directory is writable
+            if not os.access(db_dir, os.W_OK):
+                raise PermissionError(f"Directory '{db_dir}' is not writable")
+            
+            print(f"Database directory '{db_dir}' is writable")
+        
         with app.app_context():
             db.create_all()
             _db_initialized = True
+            print("✓ Database tables created successfully")
     except Exception as e:
-        # Log error for debugging but don't fail - tables might already exist
-        # In serverless, this will be retried on each request if needed
+        # Log error for debugging
         import traceback
-        print(f"Database initialization: {e}")
-        traceback.print_exc()
+        error_details = f"Database initialization error: {e}\n{traceback.format_exc()}"
+        print(error_details)
         # Don't set _db_initialized = True if it failed, so we can retry
 
 # Initialize on import for local development
